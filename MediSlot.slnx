@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MediSlot.API/MediSlot.API.csproj" />
+    <Project Path="src/MediSlot.Application/MediSlot.Application.csproj" />
+    <Project Path="src/MediSlot.Domain/MediSlot.Domain.csproj" />
+    <Project Path="src/MediSlot.Infrastructure/MediSlot.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MediSlot.UnitTests/MediSlot.UnitTests.csproj" />
+  </Folder>
+</Solution>

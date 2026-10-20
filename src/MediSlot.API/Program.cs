@@ -1,7 +1,8 @@
-using System.Text;
 using FluentValidation;
+using System.Text.Json.Serialization;
 using MediSlot.API.Filters;
 using MediSlot.API.Middleware;
+using MediSlot.API.OpenApi;
 using MediSlot.Application.Common;
 using MediSlot.Application.Interfaces;
 using MediSlot.Application.Validators;
@@ -10,7 +11,8 @@ using MediSlot.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using MediSlot.API.OpenApi;
+using System.Text;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -52,6 +54,7 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ISpecializationService, SpecializationService>();
 builder.Services.AddScoped<IDoctorService, DoctorService>();
+builder.Services.AddScoped<IScheduleService, ScheduleService>();
 builder.Services.Configure<AdminSettings>(builder.Configuration.GetSection(AdminSettings.SectionName));
 builder.Services.AddScoped<AdminSeeder>();
 
@@ -60,8 +63,8 @@ builder.Services.AddValidatorsFromAssemblyContaining<RegisterRequestValidator>()
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
-builder.Services.AddControllers(options => options.Filters.Add<ValidationFilter>());
-builder.Services.AddOpenApi(options =>
+builder.Services.AddControllers(options => options.Filters.Add<ValidationFilter>())
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter())); builder.Services.AddOpenApi(options =>
     options.AddDocumentTransformer<BearerSecuritySchemeTransformer>());
 
 var app = builder.Build();

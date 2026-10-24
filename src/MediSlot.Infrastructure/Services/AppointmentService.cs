@@ -172,4 +172,89 @@ public class AppointmentService : IAppointmentService
             .FirstAsync(ct);
     }
 
+
+    public async Task<List<AppointmentResponse>> GetForDoctorAsync(
+    int userId, DateOnly? date, AppointmentStatus? status, CancellationToken ct = default)
+    {
+        var doctorId = await GetDoctorIdAsync(userId, ct);
+
+        var query = _db.Appointments
+            .AsNoTracking()
+            .Where(a => a.DoctorId == doctorId);
+
+        if (date.HasValue)
+            query = query.Where(a => a.Slot.Date == date.Value);
+
+        if (status.HasValue)
+            query = query.Where(a => a.Status == status.Value);
+
+        return await query
+            .OrderBy(a => a.Slot.Date)
+            .ThenBy(a => a.Slot.StartTime)
+            .Select(ToResponse)
+            .ToListAsync(ct);
+    }
+
+    public Task<AppointmentResponse> CompleteAsync(int userId, int appointmentId, CancellationToken ct = default)
+        => ChangeStatusAsync(userId, appointmentId, AppointmentStatus.Completed, ct);
+
+    public Task<AppointmentResponse> MarkNoShowAsync(int userId, int appointmentId, CancellationToken ct = default)
+        => ChangeStatusAsync(userId, appointmentId, AppointmentStatus.NoShow, ct);
+
+    public async Task<List<AppointmentResponse>> GetAllAsync(
+        int? doctorId, DateOnly? date, AppointmentStatus? status, CancellationToken ct = default)
+    {
+        var query = _db.Appointments.AsNoTracking().AsQueryable();
+
+        if (doctorId.HasValue)
+            query = query.Where(a => a.DoctorId == doctorId.Value);
+
+        if (date.HasValue)
+            query = query.Where(a => a.Slot.Date == date.Value);
+
+        if (status.HasValue)
+            query = query.Where(a => a.Status == status.Value);
+
+        return await query
+            .OrderByDescending(a => a.Slot.Date)
+            .ThenByDescending(a => a.Slot.StartTime)
+            .Select(ToResponse)
+            .ToListAsync(ct);
+    }
+
+    private async Task<int> GetDoctorIdAsync(int userId, CancellationToken ct)
+        => await _db.Doctors
+            .Where(d => d.UserId == userId && d.User.IsActive)
+            .Select(d => (int?)d.Id)
+            .FirstOrDefaultAsync(ct)
+            ?? throw new NotFoundException("Doctor profile not found.");
+
+    private async Task<AppointmentResponse> ChangeStatusAsync(
+        int userId, int appointmentId, AppointmentStatus newStatus, CancellationToken ct)
+    {
+        var doctorId = await GetDoctorIdAsync(userId, ct);
+
+        // DoctorId pan match karto, mhanje dusrya doctor chi appointment badlat nahi (IDOR)
+        var appointment = await _db.Appointments
+            .Include(a => a.Slot)
+            .FirstOrDefaultAsync(a => a.Id == appointmentId && a.DoctorId == doctorId, ct)
+            ?? throw new NotFoundException("Appointment not found.");
+
+        if (appointment.Status != AppointmentStatus.Booked)
+            throw new ConflictException($"Appointment is already {appointment.Status}.");
+
+        var slotStart = appointment.Slot.Date.ToDateTime(appointment.Slot.StartTime);
+
+        if (slotStart > ClinicNow)
+            throw new BadRequestException("Appointment has not started yet.");
+
+        appointment.Status = newStatus;
+        await _db.SaveChangesAsync(ct);
+
+        return await _db.Appointments
+            .AsNoTracking()
+            .Where(a => a.Id == appointmentId)
+            .Select(ToResponse)
+            .FirstAsync(ct);
+    }
 }

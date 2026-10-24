@@ -6,4 +6,6 @@ public class ClinicSettings
 
     public string TimeZoneId { get; set; } = "UTC";
     public int MaxGenerateDays { get; set; } = 30;
+
+    public int CancellationCutoffHours { get; set; } = 2;
 }

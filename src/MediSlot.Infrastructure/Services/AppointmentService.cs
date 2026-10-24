@@ -14,11 +14,13 @@ public class AppointmentService : IAppointmentService
 {
     private readonly AppDbContext _db;
     private readonly TimeZoneInfo _tz;
+    private readonly int _cancellationCutoffHours;
 
     public AppointmentService(AppDbContext db, IOptions<ClinicSettings> options)
     {
         _db = db;
         _tz = TimeZoneInfo.FindSystemTimeZoneById(options.Value.TimeZoneId);
+        _cancellationCutoffHours = options.Value.CancellationCutoffHours;
     }
 
     private DateTime ClinicNow => TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, _tz);
@@ -108,6 +110,7 @@ public class AppointmentService : IAppointmentService
 
     public async Task<List<AppointmentResponse>> GetMineAsync(int userId, CancellationToken ct = default)
     {
+
         var patientId = await _db.Patients
             .Where(p => p.UserId == userId)
             .Select(p => (int?)p.Id)
@@ -122,4 +125,51 @@ public class AppointmentService : IAppointmentService
             .Select(ToResponse)
             .ToListAsync(ct);
     }
+
+   
+
+    public async Task<AppointmentResponse> CancelAsync(
+    int userId, int appointmentId, CancellationToken ct = default)
+    {
+        var patientId = await _db.Patients
+            .Where(p => p.UserId == userId)
+            .Select(p => (int?)p.Id)
+            .FirstOrDefaultAsync(ct)
+            ?? throw new NotFoundException("Patient profile not found.");
+
+        // PatientId pan match karto, mhanje dusryachi appointment cancel hot nahi (IDOR)
+        var appointment = await _db.Appointments
+            .Include(a => a.Slot)
+            .FirstOrDefaultAsync(a => a.Id == appointmentId && a.PatientId == patientId, ct)
+            ?? throw new NotFoundException("Appointment not found.");
+
+        if (appointment.Status != AppointmentStatus.Booked)
+            throw new ConflictException($"Appointment is already {appointment.Status}.");
+
+        var slotStart = appointment.Slot.Date.ToDateTime(appointment.Slot.StartTime);
+
+        if (slotStart - ClinicNow < TimeSpan.FromHours(_cancellationCutoffHours))
+            throw new BadRequestException(
+                $"Appointments can only be cancelled at least {_cancellationCutoffHours} hours before the start time.");
+
+        appointment.Status = AppointmentStatus.Cancelled;
+        appointment.CancelledAt = DateTime.UtcNow;
+        appointment.Slot.IsBooked = false;   // slot parat free
+
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new ConflictException("Appointment was modified. Please refresh and try again.");
+        }
+
+        return await _db.Appointments
+            .AsNoTracking()
+            .Where(a => a.Id == appointmentId)
+            .Select(ToResponse)
+            .FirstAsync(ct);
+    }
+
 }

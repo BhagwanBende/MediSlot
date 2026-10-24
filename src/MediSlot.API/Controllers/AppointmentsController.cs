@@ -30,4 +30,8 @@ public class AppointmentsController : ControllerBase
     [HttpGet("my")]
     public async Task<ActionResult<List<AppointmentResponse>>> GetMine(CancellationToken ct)
         => Ok(await _service.GetMineAsync(CurrentUserId, ct));
+
+    [HttpPut("{id:int}/cancel")]
+    public async Task<ActionResult<AppointmentResponse>> Cancel(int id, CancellationToken ct)
+    => Ok(await _service.CancelAsync(CurrentUserId, id, ct));
 }

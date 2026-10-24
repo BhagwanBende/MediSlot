@@ -55,6 +55,9 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ISpecializationService, SpecializationService>();
 builder.Services.AddScoped<IDoctorService, DoctorService>();
 builder.Services.AddScoped<IScheduleService, ScheduleService>();
+builder.Services.AddScoped<IAppointmentService, AppointmentService>();
+builder.Services.Configure<ClinicSettings>(builder.Configuration.GetSection(ClinicSettings.SectionName));
+builder.Services.AddScoped<ISlotService, SlotService>();
 builder.Services.Configure<AdminSettings>(builder.Configuration.GetSection(AdminSettings.SectionName));
 builder.Services.AddScoped<AdminSeeder>();
 

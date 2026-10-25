@@ -1,3 +1,6 @@
+
+using MediSlot.API.HealthChecks;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using FluentValidation;
 using Hangfire;
 using Hangfire.Dashboard;
@@ -73,6 +76,8 @@ builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<AdminSeeder>();
 builder.Services.AddScoped<INotificationService, LogNotificationService>();
 builder.Services.AddScoped<AppointmentReminderJob>();
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<AppDbContext>("database", tags: ["ready"]);
 
 
 builder.Services.AddScoped<SlotGenerationJob>();
@@ -140,7 +145,9 @@ app.UseSerilogRequestLogging(options =>
         if (ex is not null || httpContext.Response.StatusCode >= 500)
             return Serilog.Events.LogEventLevel.Error;
 
-        return httpContext.Request.Path.StartsWithSegments("/hangfire")
+        var path = httpContext.Request.Path;
+
+        return path.StartsWithSegments("/hangfire") || path.StartsWithSegments("/health")
             ? Serilog.Events.LogEventLevel.Verbose
             : Serilog.Events.LogEventLevel.Information;
     };
@@ -165,5 +172,18 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
 });
 
 app.MapControllers();
+
+// Live: dependency check nahi, fakt "process jivant ahe"
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false
+});
+
+// Ready: "ready" tag asalele checks (database)
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+    ResponseWriter = HealthCheckResponseWriter.WriteAsync
+});
 
 app.Run();

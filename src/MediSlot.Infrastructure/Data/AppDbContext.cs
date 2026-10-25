@@ -64,6 +64,14 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.DoctorId).OnDelete(DeleteBehavior.Restrict);
             // same doctor + same date + same start time = fakt ek slot
             e.HasIndex(x => new { x.DoctorId, x.Date, x.StartTime }).IsUnique();
+
+            e.HasIndex(x => new { x.Date, x.DoctorId })
+                .IncludeProperties(x => x.IsBooked)
+                .HasDatabaseName("IX_Slots_Date_DoctorId");
+
+            e.HasIndex(x => new { x.DoctorId, x.Date, x.StartTime })
+                .HasFilter("[IsBooked] = 0")
+                .HasDatabaseName("IX_Slots_Available");
         });
 
         b.Entity<Appointment>(e =>
@@ -78,6 +86,7 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.SlotId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => new { x.PatientId, x.Status });
             e.HasIndex(x => x.SlotId);
+            e.HasIndex(x => new { x.DoctorId, x.Status });
         });
 
         b.Entity<RefreshToken>(e =>

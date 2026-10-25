@@ -56,9 +56,9 @@ namespace MediSlot.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("DoctorId");
-
                     b.HasIndex("SlotId");
+
+                    b.HasIndex("DoctorId", "Status");
 
                     b.HasIndex("PatientId", "Status");
 
@@ -223,8 +223,15 @@ namespace MediSlot.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Date", "DoctorId")
+                        .HasDatabaseName("IX_Slots_Date_DoctorId");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("Date", "DoctorId"), new[] { "IsBooked" });
+
                     b.HasIndex("DoctorId", "Date", "StartTime")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("IX_Slots_Available")
+                        .HasFilter("[IsBooked] = 0");
 
                     b.ToTable("Slots");
                 });

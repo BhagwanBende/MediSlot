@@ -1,5 +1,7 @@
 using FluentValidation;
-using System.Text.Json.Serialization;
+using Hangfire;
+using Hangfire.Dashboard;
+using Hangfire.SqlServer;
 using MediSlot.API.Filters;
 using MediSlot.API.Middleware;
 using MediSlot.API.OpenApi;
@@ -7,13 +9,15 @@ using MediSlot.Application.Common;
 using MediSlot.Application.Interfaces;
 using MediSlot.Application.Validators;
 using MediSlot.Infrastructure.Data;
+using MediSlot.Infrastructure.Jobs;
 using MediSlot.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Serilog;
 using System.Text;
 using System.Text.Json.Serialization;
-using Serilog;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -68,6 +72,27 @@ builder.Services.Configure<AdminSettings>(builder.Configuration.GetSection(Admin
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<AdminSeeder>();
 
+
+builder.Services.AddScoped<SlotGenerationJob>();
+
+// Hangfire: jobs SQL Server madhe save hotat (HangFire naavacha vegla schema, aapli tables tashich rahtat)
+builder.Services.AddHangfire(config => config
+    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+    .UseSimpleAssemblyNameTypeSerializer()
+    .UseRecommendedSerializerSettings()
+    .UseSqlServerStorage(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        new SqlServerStorageOptions
+        {
+            CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
+            SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
+            QueuePollInterval = TimeSpan.Zero,
+            UseRecommendedIsolationLevel = true,
+            DisableGlobalLocks = true
+        }));
+
+builder.Services.AddHangfireServer();
+
 // Validation + error handling
 builder.Services.AddValidatorsFromAssemblyContaining<RegisterRequestValidator>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -84,9 +109,31 @@ using (var scope = app.Services.CreateScope())
     await scope.ServiceProvider.GetRequiredService<AdminSeeder>().SeedAsync();
 }
 
-app.UseExceptionHandler();
-app.UseSerilogRequestLogging();
+// Recurring job register (job aadhich asel tar update hoto, duplicate nahi)
+var clinicSettings = builder.Configuration.GetSection(ClinicSettings.SectionName).Get<ClinicSettings>()
+    ?? new ClinicSettings();
+var slotCron = builder.Configuration["Jobs:SlotGenerationCron"] ?? "0 1 * * *";
 
+app.Services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<SlotGenerationJob>(
+    "generate-slots",
+    job => job.RunAsync(),
+    slotCron,
+    new RecurringJobOptions { TimeZone = TimeZoneInfo.FindSystemTimeZoneById(clinicSettings.TimeZoneId) });
+
+app.UseExceptionHandler();
+app.UseSerilogRequestLogging(options =>
+{
+    // Hangfire dashboard che polling requests log karu naka (noise), pan error asel tar log kara
+    options.GetLevel = (httpContext, elapsed, ex) =>
+    {
+        if (ex is not null || httpContext.Response.StatusCode >= 500)
+            return Serilog.Events.LogEventLevel.Error;
+
+        return httpContext.Request.Path.StartsWithSegments("/hangfire")
+            ? Serilog.Events.LogEventLevel.Verbose
+            : Serilog.Events.LogEventLevel.Information;
+    };
+});
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -98,6 +145,13 @@ app.UseHttpsRedirection();
 
 app.UseAuthentication();   // aadhi: tumhi kon ahat
 app.UseAuthorization();    // mag: tumhala allowed ahe ka
+
+
+// Dashboard: default ne fakt local machine var ughadto (production madhe swatacha auth filter lagto)
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = new[] { new LocalRequestsOnlyAuthorizationFilter() }
+});
 
 app.MapControllers();
 

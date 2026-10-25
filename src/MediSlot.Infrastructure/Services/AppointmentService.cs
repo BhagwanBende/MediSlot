@@ -7,6 +7,7 @@ using MediSlot.Domain.Enums;
 using MediSlot.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 
 namespace MediSlot.Infrastructure.Services;
 
@@ -15,12 +16,17 @@ public class AppointmentService : IAppointmentService
     private readonly AppDbContext _db;
     private readonly TimeZoneInfo _tz;
     private readonly int _cancellationCutoffHours;
+    private readonly ILogger<AppointmentService> _logger;
 
-    public AppointmentService(AppDbContext db, IOptions<ClinicSettings> options)
+    public AppointmentService(
+        AppDbContext db,
+        IOptions<ClinicSettings> options,
+        ILogger<AppointmentService> logger)
     {
         _db = db;
         _tz = TimeZoneInfo.FindSystemTimeZoneById(options.Value.TimeZoneId);
         _cancellationCutoffHours = options.Value.CancellationCutoffHours;
+        _logger = logger;
     }
 
     private DateTime ClinicNow => TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, _tz);
@@ -98,8 +104,16 @@ public class AppointmentService : IAppointmentService
         catch (DbUpdateConcurrencyException)
         {
             // Dusrya patient ni aadhich book kela
+            _logger.LogWarning(
+                "Booking conflict: slot {SlotId} was taken before patient {PatientId} could book it",
+                request.SlotId, patient.Id);
+
             throw new ConflictException("Slot was just booked by someone else. Please choose another slot.");
         }
+
+        _logger.LogInformation(
+            "Appointment {AppointmentId} booked: patient {PatientId}, doctor {DoctorId}, slot {SlotId}",
+            appointment.Id, patient.Id, slot.DoctorId, slot.Id);
 
         return await _db.Appointments
             .AsNoTracking()
@@ -148,6 +162,10 @@ public class AppointmentService : IAppointmentService
         {
             throw new ConflictException("Appointment was modified. Please refresh and try again.");
         }
+
+        _logger.LogInformation(
+    "Appointment {AppointmentId} cancelled by patient {PatientId}, slot {SlotId} released",
+    appointment.Id, patientId, appointment.SlotId);
 
         return await _db.Appointments
             .AsNoTracking()

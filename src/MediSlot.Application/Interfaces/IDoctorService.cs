@@ -1,4 +1,5 @@
-﻿using MediSlot.Application.DTOs.Doctors;
+﻿using MediSlot.Application.Common;
+using MediSlot.Application.DTOs.Doctors;
 
 namespace MediSlot.Application.Interfaces;
 
@@ -9,4 +10,6 @@ public interface IDoctorService
     Task<DoctorResponse> CreateAsync(CreateDoctorRequest request, CancellationToken ct = default);
     Task<DoctorResponse> UpdateAsync(int id, UpdateDoctorRequest request, CancellationToken ct = default);
     Task DeactivateAsync(int id, CancellationToken ct = default);
+
+    Task<PagedResponse<DoctorResponse>> GetAllAsync(DoctorQuery query, CancellationToken ct = default);
 }

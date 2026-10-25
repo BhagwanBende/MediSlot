@@ -140,4 +140,43 @@ public class DoctorService : IDoctorService
 
         await _db.SaveChangesAsync(ct);
     }
+
+    public async Task<PagedResponse<DoctorResponse>> GetAllAsync(
+    DoctorQuery query, CancellationToken ct = default)
+    {
+        var filtered = _db.Doctors.AsNoTracking().Where(d => d.User.IsActive);
+
+        if (query.SpecializationId.HasValue)
+            filtered = filtered.Where(d => d.SpecializationId == query.SpecializationId.Value);
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var term = query.Search.Trim();
+            filtered = filtered.Where(d => d.User.Name.Contains(term));
+        }
+
+        // Total count filter nantar, paging chya aadhi
+        var totalCount = await filtered.CountAsync(ct);
+
+        IOrderedQueryable<Doctor> ordered = (query.SortBy?.ToLowerInvariant(), query.Descending) switch
+        {
+            ("fee", false) => filtered.OrderBy(d => d.Fee),
+            ("fee", true) => filtered.OrderByDescending(d => d.Fee),
+            ("experience", false) => filtered.OrderBy(d => d.ExperienceYears),
+            ("experience", true) => filtered.OrderByDescending(d => d.ExperienceYears),
+            (_, true) => filtered.OrderByDescending(d => d.User.Name),
+            _ => filtered.OrderBy(d => d.User.Name)
+        };
+
+        // Tie-breaker: same fee asli tari page 1 ani page 2 madhe same doctor repeat hot nahi
+        ordered = ordered.ThenBy(d => d.Id);
+
+        var items = await ordered
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
+            .Select(ToResponse)
+            .ToListAsync(ct);
+
+        return new PagedResponse<DoctorResponse>(items, query.Page, query.PageSize, totalCount);
+    }
 }

@@ -1,4 +1,5 @@
-﻿using MediSlot.Application.DTOs.Doctors;
+﻿using MediSlot.Application.Common;
+using MediSlot.Application.DTOs.Doctors;
 using MediSlot.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -48,4 +49,9 @@ public class DoctorsController : ControllerBase
         await _service.DeactivateAsync(id, ct);
         return NoContent();
     }
+
+    [HttpGet]
+    public async Task<ActionResult<PagedResponse<DoctorResponse>>> GetAll(
+    [FromQuery] DoctorQuery query, CancellationToken ct)
+    => Ok(await _service.GetAllAsync(query, ct));
 }

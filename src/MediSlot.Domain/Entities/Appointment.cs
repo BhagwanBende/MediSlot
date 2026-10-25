@@ -19,4 +19,6 @@ public class Appointment
     public string? Reason { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? CancelledAt { get; set; }
+
+    public DateTime? ReminderSentAt { get; set; }
 }

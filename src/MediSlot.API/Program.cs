@@ -71,6 +71,8 @@ builder.Services.AddScoped<ISlotService, SlotService>();
 builder.Services.Configure<AdminSettings>(builder.Configuration.GetSection(AdminSettings.SectionName));
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<AdminSeeder>();
+builder.Services.AddScoped<INotificationService, LogNotificationService>();
+builder.Services.AddScoped<AppointmentReminderJob>();
 
 
 builder.Services.AddScoped<SlotGenerationJob>();
@@ -118,6 +120,15 @@ app.Services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<SlotGenerati
     "generate-slots",
     job => job.RunAsync(),
     slotCron,
+    new RecurringJobOptions { TimeZone = TimeZoneInfo.FindSystemTimeZoneById(clinicSettings.TimeZoneId) });
+
+
+var reminderCron = builder.Configuration["Jobs:ReminderCron"] ?? "0 * * * *";
+
+app.Services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<AppointmentReminderJob>(
+    "send-reminders",
+    job => job.RunAsync(),
+    reminderCron,
     new RecurringJobOptions { TimeZone = TimeZoneInfo.FindSystemTimeZoneById(clinicSettings.TimeZoneId) });
 
 app.UseExceptionHandler();

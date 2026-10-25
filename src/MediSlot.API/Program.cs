@@ -59,6 +59,7 @@ builder.Services.AddScoped<IAppointmentService, AppointmentService>();
 builder.Services.Configure<ClinicSettings>(builder.Configuration.GetSection(ClinicSettings.SectionName));
 builder.Services.AddScoped<ISlotService, SlotService>();
 builder.Services.Configure<AdminSettings>(builder.Configuration.GetSection(AdminSettings.SectionName));
+builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<AdminSeeder>();
 
 // Validation + error handling

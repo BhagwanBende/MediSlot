@@ -1,9 +1,10 @@
-﻿using System.Security.Claims;
+﻿using MediSlot.Application.Common;
 using MediSlot.Application.DTOs.Appointments;
 using MediSlot.Application.Interfaces;
 using MediSlot.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace MediSlot.API.Controllers;
 
@@ -23,11 +24,9 @@ public class StaffAppointmentsController : ControllerBase
     // Doctor: swatache appointments
     [HttpGet("api/doctors/me/appointments")]
     [Authorize(Roles = "Doctor")]
-    public async Task<ActionResult<List<AppointmentResponse>>> GetMine(
-        [FromQuery] DateOnly? date,
-        [FromQuery] AppointmentStatus? status,
-        CancellationToken ct)
-        => Ok(await _service.GetForDoctorAsync(CurrentUserId, date, status, ct));
+    public async Task<ActionResult<PagedResponse<AppointmentResponse>>> GetMine(
+        [FromQuery] AppointmentQuery query, CancellationToken ct)
+        => Ok(await _service.GetForDoctorAsync(CurrentUserId, query, ct));
 
     [HttpPut("api/appointments/{id:int}/complete")]
     [Authorize(Roles = "Doctor")]
@@ -42,10 +41,7 @@ public class StaffAppointmentsController : ControllerBase
     // Admin: sarve appointments
     [HttpGet("api/admin/appointments")]
     [Authorize(Roles = "Admin")]
-    public async Task<ActionResult<List<AppointmentResponse>>> GetAll(
-        [FromQuery] int? doctorId,
-        [FromQuery] DateOnly? date,
-        [FromQuery] AppointmentStatus? status,
-        CancellationToken ct)
-        => Ok(await _service.GetAllAsync(doctorId, date, status, ct));
+    public async Task<ActionResult<PagedResponse<AppointmentResponse>>> GetAll(
+        [FromQuery] AppointmentQuery query, CancellationToken ct)
+        => Ok(await _service.GetAllAsync(query, ct));
 }

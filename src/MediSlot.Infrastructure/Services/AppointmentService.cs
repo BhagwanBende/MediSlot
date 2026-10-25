@@ -108,23 +108,7 @@ public class AppointmentService : IAppointmentService
             .FirstAsync(ct);
     }
 
-    public async Task<List<AppointmentResponse>> GetMineAsync(int userId, CancellationToken ct = default)
-    {
-
-        var patientId = await _db.Patients
-            .Where(p => p.UserId == userId)
-            .Select(p => (int?)p.Id)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new NotFoundException("Patient profile not found.");
-
-        return await _db.Appointments
-            .AsNoTracking()
-            .Where(a => a.PatientId == patientId)
-            .OrderByDescending(a => a.Slot.Date)
-            .ThenByDescending(a => a.Slot.StartTime)
-            .Select(ToResponse)
-            .ToListAsync(ct);
-    }
+  
 
    
 
@@ -173,55 +157,14 @@ public class AppointmentService : IAppointmentService
     }
 
 
-    public async Task<List<AppointmentResponse>> GetForDoctorAsync(
-    int userId, DateOnly? date, AppointmentStatus? status, CancellationToken ct = default)
-    {
-        var doctorId = await GetDoctorIdAsync(userId, ct);
-
-        var query = _db.Appointments
-            .AsNoTracking()
-            .Where(a => a.DoctorId == doctorId);
-
-        if (date.HasValue)
-            query = query.Where(a => a.Slot.Date == date.Value);
-
-        if (status.HasValue)
-            query = query.Where(a => a.Status == status.Value);
-
-        return await query
-            .OrderBy(a => a.Slot.Date)
-            .ThenBy(a => a.Slot.StartTime)
-            .Select(ToResponse)
-            .ToListAsync(ct);
-    }
-
+    
     public Task<AppointmentResponse> CompleteAsync(int userId, int appointmentId, CancellationToken ct = default)
         => ChangeStatusAsync(userId, appointmentId, AppointmentStatus.Completed, ct);
 
     public Task<AppointmentResponse> MarkNoShowAsync(int userId, int appointmentId, CancellationToken ct = default)
         => ChangeStatusAsync(userId, appointmentId, AppointmentStatus.NoShow, ct);
 
-    public async Task<List<AppointmentResponse>> GetAllAsync(
-        int? doctorId, DateOnly? date, AppointmentStatus? status, CancellationToken ct = default)
-    {
-        var query = _db.Appointments.AsNoTracking().AsQueryable();
-
-        if (doctorId.HasValue)
-            query = query.Where(a => a.DoctorId == doctorId.Value);
-
-        if (date.HasValue)
-            query = query.Where(a => a.Slot.Date == date.Value);
-
-        if (status.HasValue)
-            query = query.Where(a => a.Status == status.Value);
-
-        return await query
-            .OrderByDescending(a => a.Slot.Date)
-            .ThenByDescending(a => a.Slot.StartTime)
-            .Select(ToResponse)
-            .ToListAsync(ct);
-    }
-
+   
     private async Task<int> GetDoctorIdAsync(int userId, CancellationToken ct)
         => await _db.Doctors
             .Where(d => d.UserId == userId && d.User.IsActive)
@@ -256,5 +199,80 @@ public class AppointmentService : IAppointmentService
             .Where(a => a.Id == appointmentId)
             .Select(ToResponse)
             .FirstAsync(ct);
+    }
+
+
+    public async Task<PagedResponse<AppointmentResponse>> GetMineAsync(
+    int userId, AppointmentQuery query, CancellationToken ct = default)
+    {
+        var patientId = await _db.Patients
+            .Where(p => p.UserId == userId)
+            .Select(p => (int?)p.Id)
+            .FirstOrDefaultAsync(ct)
+            ?? throw new NotFoundException("Patient profile not found.");
+
+        // Aadhi ownership (swatacha data), mag filters
+        var filtered = ApplyFilters(
+            _db.Appointments.AsNoTracking().Where(a => a.PatientId == patientId), query);
+
+        return await ToPageAsync(filtered, newestFirst: true, query, ct);
+    }
+
+    public async Task<PagedResponse<AppointmentResponse>> GetForDoctorAsync(
+        int userId, AppointmentQuery query, CancellationToken ct = default)
+    {
+        var doctorId = await GetDoctorIdAsync(userId, ct);
+
+        var filtered = ApplyFilters(
+            _db.Appointments.AsNoTracking().Where(a => a.DoctorId == doctorId), query);
+
+        // Doctor la jawal chi appointment aadhi disavi
+        return await ToPageAsync(filtered, newestFirst: false, query, ct);
+    }
+
+    public async Task<PagedResponse<AppointmentResponse>> GetAllAsync(
+        AppointmentQuery query, CancellationToken ct = default)
+    {
+        var source = _db.Appointments.AsNoTracking().AsQueryable();
+
+        if (query.DoctorId.HasValue)
+            source = source.Where(a => a.DoctorId == query.DoctorId.Value);
+
+        return await ToPageAsync(ApplyFilters(source, query), newestFirst: true, query, ct);
+    }
+
+    private static IQueryable<Appointment> ApplyFilters(IQueryable<Appointment> source, AppointmentQuery query)
+    {
+        if (query.Date.HasValue)
+            source = source.Where(a => a.Slot.Date == query.Date.Value);
+
+        if (query.Status.HasValue)
+            source = source.Where(a => a.Status == query.Status.Value);
+
+        return source;
+    }
+
+    private async Task<PagedResponse<AppointmentResponse>> ToPageAsync(
+        IQueryable<Appointment> filtered, bool newestFirst, AppointmentQuery query, CancellationToken ct)
+    {
+        // Total count filter nantar, paging chya aadhi
+        var totalCount = await filtered.CountAsync(ct);
+
+        // Id tie-breaker: same vel asli tari page madhe rows repeat/miss hot nahit
+        var ordered = newestFirst
+            ? filtered.OrderByDescending(a => a.Slot.Date)
+                      .ThenByDescending(a => a.Slot.StartTime)
+                      .ThenByDescending(a => a.Id)
+            : filtered.OrderBy(a => a.Slot.Date)
+                      .ThenBy(a => a.Slot.StartTime)
+                      .ThenBy(a => a.Id);
+
+        var items = await ordered
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
+            .Select(ToResponse)
+            .ToListAsync(ct);
+
+        return new PagedResponse<AppointmentResponse>(items, query.Page, query.PageSize, totalCount);
     }
 }

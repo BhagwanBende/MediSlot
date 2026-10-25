@@ -1,8 +1,9 @@
-﻿using System.Security.Claims;
+﻿using MediSlot.Application.Common;
 using MediSlot.Application.DTOs.Appointments;
 using MediSlot.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace MediSlot.API.Controllers;
 
@@ -28,8 +29,9 @@ public class AppointmentsController : ControllerBase
     }
 
     [HttpGet("my")]
-    public async Task<ActionResult<List<AppointmentResponse>>> GetMine(CancellationToken ct)
-        => Ok(await _service.GetMineAsync(CurrentUserId, ct));
+    public async Task<ActionResult<PagedResponse<AppointmentResponse>>> GetMine(
+     [FromQuery] AppointmentQuery query, CancellationToken ct)
+     => Ok(await _service.GetMineAsync(CurrentUserId, query, ct));
 
     [HttpPut("{id:int}/cancel")]
     public async Task<ActionResult<AppointmentResponse>> Cancel(int id, CancellationToken ct)

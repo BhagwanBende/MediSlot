@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\MediSlot.Application\MediSlot.Application.csproj" />
     <ProjectReference Include="..\..\src\MediSlot.Domain\MediSlot.Domain.csproj" />
+    <ProjectReference Include="..\..\src\MediSlot.Infrastructure\MediSlot.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
